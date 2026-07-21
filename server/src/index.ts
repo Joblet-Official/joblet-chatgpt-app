@@ -111,7 +111,10 @@ function buildMcpServer() {
 
       return {
         content: [{ type: "text", text: `Found ${data.total} Joblet opportunities.` }],
-        structuredContent: data,
+        structuredContent: {
+          type: "application/json",
+          data: data
+        },
         _meta: { ui: { resourceUri: WIDGET_URI } }
       } as any;
     } catch (error) {
