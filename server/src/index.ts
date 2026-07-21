@@ -91,7 +91,7 @@ function buildMcpServer() {
       if (args.limit) params.set("limit", String(args.limit));
       if (args.remote) params.set("remote", "true");
 
-      const response = await fetch(`https://joblet.ai/api/jobs?${params.toString()}`, {
+      const response = await fetch(`https://joblet.ai/api/search?${params.toString()}`, {
         headers: { "Accept": "application/json" }
       });
 
