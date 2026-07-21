@@ -39,7 +39,7 @@ app.get("/.well-known/openai-apps-challenge", (req, res) => {
   res.type("text/plain").send(token);
 });
 
-const WIDGET_URI = "ui://joblet/job-cards-v3";
+const WIDGET_URI = "ui://joblet/job-cards-v4";
 
 // Create a fresh McpServer per connection (stateless)
 function buildMcpServer() {
@@ -89,7 +89,7 @@ function buildMcpServer() {
       params.set("q", args.query);
       if (args.location) params.set("location", args.location);
       if (args.limit) params.set("limit", String(args.limit));
-      else params.set("limit", "10");
+      else params.set("limit", "3");
       if (args.remote) params.set("remote", "true");
 
       const response = await fetch(`https://joblet.ai/api/search?${params.toString()}`, {
@@ -111,13 +111,14 @@ function buildMcpServer() {
         url: j.applyUrl || `https://joblet.ai`
       }));
 
-      const data = { jobs, total: apiData.pagination?.total || jobs.length };
-
       return {
-        content: [{ type: "text", text: `Found ${data.total} Joblet opportunities.` }],
+        content: [{ type: "text", text: `Found ${apiData.pagination?.total || jobs.length} Joblet opportunities.` }],
         structuredContent: {
           type: "application/json",
-          data: data
+          data: {
+            jobs: jobs,
+            total: apiData.pagination?.total || jobs.length
+          }
         },
         _meta: { ui: { resourceUri: WIDGET_URI } }
       } as any;
