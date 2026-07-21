@@ -64,17 +64,34 @@ function buildMcpServer() {
     },
     async (args) => {
       try {
-        const response = await fetch("https://joblet.ai/api/chatgpt/jobs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(args)
+        // Build query params for the working Joblet API
+        const params = new URLSearchParams();
+        params.set("q", args.query);
+        if (args.location) params.set("location", args.location);
+        if (args.limit) params.set("limit", String(args.limit));
+        if (args.remote) params.set("remote", "true");
+
+        const response = await fetch(`https://joblet.ai/api/jobs?${params.toString()}`, {
+          headers: { "Accept": "application/json" }
         });
 
         if (!response.ok) throw new Error(`Joblet API error: ${response.status}`);
-        const data = await response.json();
+        const raw = await response.json();
+
+        // Normalize to a clean format our widget understands
+        const jobs = (raw.jobs || []).map((j: any) => ({
+          title: j.title,
+          company: j.company?.name || "",
+          location: j.location || "Remote",
+          salary: j.salary || null,
+          type: (j.workSchedule?.[0] || j.employmentType?.[0] || "Full-time"),
+          url: j.applyUrl || `https://joblet.ai`
+        }));
+
+        const data = { jobs, total: raw.pagination?.total || jobs.length };
 
         return {
-          content: [{ type: "text" as const, text: `Found ${data.total || 0} Joblet opportunities.` }],
+          content: [{ type: "text" as const, text: `Found ${data.total} Joblet opportunities.` }],
           structuredContent: data,
           _meta: { ui: { resourceUri: WIDGET_URI } }
         } as any;
