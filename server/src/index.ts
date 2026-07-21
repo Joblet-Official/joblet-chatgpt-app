@@ -89,6 +89,7 @@ function buildMcpServer() {
       params.set("q", args.query);
       if (args.location) params.set("location", args.location);
       if (args.limit) params.set("limit", String(args.limit));
+      else params.set("limit", "10");
       if (args.remote) params.set("remote", "true");
 
       const response = await fetch(`https://joblet.ai/api/search?${params.toString()}`, {
