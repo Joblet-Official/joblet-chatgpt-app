@@ -1,5 +1,5 @@
 async function test() {
-  const url = "http://localhost:3001/mcp";
+  const url = "https://joblet-chatgpt-app.onrender.com/mcp";
   
   try {
     const postRes = await fetch(url, {
@@ -11,8 +11,13 @@ async function test() {
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: 1,
-        method: "tools/list",
-        params: {}
+        method: "tools/call",
+        params: {
+          name: "search_jobs",
+          arguments: {
+            query: "any job"
+          }
+        }
       })
     });
     

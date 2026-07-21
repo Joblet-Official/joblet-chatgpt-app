@@ -97,8 +97,11 @@ function buildMcpServer() {
 
       if (!response.ok) throw new Error(`Joblet API error: ${response.status}`);
       const raw = await response.json();
+      
+      // The main API wraps the response in a 'data' object
+      const apiData = raw.data || raw;
 
-      const jobs = (raw.jobs || []).map((j: any) => ({
+      const jobs = (apiData.jobs || []).map((j: any) => ({
         title: j.title,
         company: j.company?.name || "",
         location: j.location || "Remote",
@@ -107,7 +110,7 @@ function buildMcpServer() {
         url: j.applyUrl || `https://joblet.ai`
       }));
 
-      const data = { jobs, total: raw.pagination?.total || jobs.length };
+      const data = { jobs, total: apiData.pagination?.total || jobs.length };
 
       return {
         content: [{ type: "text", text: `Found ${data.total} Joblet opportunities.` }],
