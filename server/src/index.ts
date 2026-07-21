@@ -94,17 +94,6 @@ const createServerInstance = () => {
               limit: { type: "number", minimum: 1, maximum: 20, default: 12 }
             },
             required: ["query"]
-          },
-          // OpenAI specific annotations for UI widgets
-          annotations: {
-            readOnlyHint: true,
-            destructiveHint: false,
-            openWorldHint: false
-          },
-          // ChatGPT Apps SDK UI Widget Metadata
-          _meta: {
-            "openai/outputTemplate": "ui://widget/carousel.html",
-            "openai/widgetAccessible": true
           }
         }
       ]
