@@ -11,9 +11,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+// IMPORTANT: Do NOT use express.json() globally - it conflicts with StreamableHTTPServerTransport
+// which needs to read the raw request body itself
+app.use(cors({
+  origin: '*',
+  exposedHeaders: ['mcp-session-id'],
+  allowedHeaders: ['Content-Type', 'mcp-session-id', 'Accept']
+}));
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
 
 // Health endpoint
 app.get("/", (req, res) => res.json({ name: "Joblet ChatGPT App", status: "running", mcp: "/mcp" }));
