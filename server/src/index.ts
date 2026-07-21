@@ -163,67 +163,8 @@ import {
 
 const sseTransports = new Map<string, SSEServerTransport>();
 
-function buildLegacyServer() {
-  const server = new Server(
-    { name: "Joblet - AI Job Search", version: "2.0.0" },
-    { capabilities: { tools: {}, resources: {} } }
-  );
-
-  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
-    resources: [{ uri: WIDGET_URI, name: "Joblet Job Cards", mimeType: "text/html" }]
-  }));
-
-  server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
-    const widgetPath = path.join(__dirname, '..', 'public', 'widget', 'job-cards.html');
-    let html: string;
-    try { html = fs.readFileSync(widgetPath, 'utf-8'); }
-    catch { html = "<html><body>Widget not found</body></html>"; }
-    return { contents: [{ uri: req.params.uri, mimeType: "text/html", text: html }] };
-  });
-
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [{
-      name: "search_jobs",
-      description: "Search current Joblet jobs by title, location, remote preference, salary, and schedule.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          query: { type: "string" },
-          location: { type: "string" },
-          limit: { type: "number", default: 12 }
-        },
-        required: ["query"]
-      },
-      _meta: { ui: { resourceUri: WIDGET_URI } }
-    }]
-  }));
-
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    if (request.params.name === "search_jobs") {
-      try {
-        const response = await fetch("https://joblet.ai/api/chatgpt/jobs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(request.params.arguments)
-        });
-        const data = await response.json();
-        return {
-          content: [{ type: "text", text: `Found ${data.total || 0} opportunities.` }],
-          structuredContent: data,
-          _meta: { ui: { resourceUri: WIDGET_URI } }
-        } as any;
-      } catch (e) {
-        return { isError: true, content: [{ type: "text", text: String(e) }] };
-      }
-    }
-    throw new Error("Tool not found");
-  });
-
-  return server;
-}
-
 app.get("/sse", async (req, res) => {
-  const server = buildLegacyServer();
+  const server = buildMcpServer();
   const transport = new SSEServerTransport("/messages", res);
   await server.connect(transport);
   sseTransports.set(transport.sessionId, transport);
