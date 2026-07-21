@@ -11,8 +11,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-// IMPORTANT: Do NOT use express.json() globally - it conflicts with StreamableHTTPServerTransport
-// which needs to read the raw request body itself
+// Restore express.json() because StreamableHTTPServerTransport NEEDS req.body to be parsed.
+// The previous "Parse error" was a false positive from Windows PowerShell mangling curl quotes.
+app.use(express.json());
 app.use(cors({
   origin: '*',
   exposedHeaders: ['mcp-session-id'],
