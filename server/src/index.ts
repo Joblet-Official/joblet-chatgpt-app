@@ -10,7 +10,6 @@ import cors from "cors";
 
 const app = express();
 app.use(cors());
-app.use(express.json());
 
 const searchJobsSchema = z.object({
   query: z.string().describe("Job title, skill, or keyword"),
