@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Joblet AI Job Carousel</title>
+  <style>
+    :root {
+      --joblet-blue: #0066FF;
+      --joblet-green: #00C853;
+      --text-main: #1A1A1A;
+      --text-secondary: #555555;
+      --bg-light: #F7F9FC;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 10px;
+      background-color: transparent;
+      color: var(--text-main);
+    }
+    .carousel-container {
+      display: flex;
+      overflow-x: auto;
+      gap: 16px;
+      padding: 10px 4px 20px 4px;
+      scroll-snap-type: x mandatory;
+      scrollbar-width: thin;
+    }
+    .carousel-container::-webkit-scrollbar {
+      height: 6px;
+    }
+    .carousel-container::-webkit-scrollbar-thumb {
+      background: #ccc;
+      border-radius: 10px;
+    }
+    .job-card {
+      min-width: 280px;
+      max-width: 280px;
+      background: white;
+      border: 1px solid #E0E0E0;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      scroll-snap-align: start;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+    }
+    .job-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(90deg, var(--joblet-blue), var(--joblet-green));
+    }
+    .company-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--joblet-blue);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    .job-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0 0 12px 0;
+      line-height: 1.3;
+    }
+    .job-details {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .detail-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .apply-btn {
+      display: inline-block;
+      text-align: center;
+      background: var(--joblet-blue);
+      color: white;
+      text-decoration: none;
+      font-weight: 600;
+      padding: 10px 16px;
+      border-radius: 8px;
+      transition: background 0.2s ease;
+      margin-top: auto;
+    }
+    .apply-btn:hover {
+      background: #0052cc;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-secondary);
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div class="empty-state">Loading Joblet opportunities...</div>
+  </div>
+
+  <script type="module">
+    const root = document.getElementById('root');
+
+    function render(data) {
+      if (!data || !data.jobs || data.jobs.length === 0) {
+        root.innerHTML = '<div class="empty-state">No jobs found. Try adjusting your search!</div>';
+        return;
+      }
+
+      const html = `
+        <div class="carousel-container">
+          ${data.jobs.map(job => `
+            <div class="job-card">
+              <div>
+                <div class="company-name">Joblet Verified</div>
+                <h3 class="job-title">${job.title}</h3>
+                <div class="job-details">
+                  <div class="detail-row">
+                    <span>📍</span> <span>${job.location || 'Remote'}</span>
+                  </div>
+                  <div class="detail-row">
+                    <span>💰</span> <span>${job.salary || 'Competitive'}</span>
+                  </div>
+                  <div class="detail-row">
+                    <span>⏰</span> <span>${job.type || 'Full-time'}</span>
+                  </div>
+                </div>
+              </div>
+              <a href="${job.url || 'https://joblet.ai'}" target="_blank" class="apply-btn">View & Apply →</a>
+            </div>
+          `).join('')}
+        </div>
+      `;
+      root.innerHTML = html;
+    }
+
+    // Initial render from ChatGPT's injected toolOutput
+    if (window.openai?.toolOutput) {
+      render(window.openai.toolOutput);
+    }
+
+    // Listen for updates from ChatGPT
+    if (window.openai?.onToolOutput) {
+      window.openai.onToolOutput((newData) => {
+        render(newData);
+      });
+    }
+  </script>
+</body>
+</html>
