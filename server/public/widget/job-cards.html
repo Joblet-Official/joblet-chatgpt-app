@@ -159,7 +159,11 @@
   <script type="module">
     const root = document.getElementById('root');
 
-    function renderJobs(data) {
+    function renderJobs(payload) {
+      // OpenAI wraps structuredContent in { type: 'application/json', data: {...} }
+      // We must unwrap it to access the actual jobs array
+      const data = payload && payload.type && payload.data ? payload.data : payload;
+
       if (!data || !data.jobs || data.jobs.length === 0) {
         root.innerHTML = '<div class="empty-state">No jobs found. Try a different search!</div>';
         return;
