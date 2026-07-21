@@ -29,12 +29,18 @@
       gap: 8px;
       margin-bottom: 16px;
     }
-    .logo {
-      font-size: 22px;
-      font-weight: 900;
-      letter-spacing: -0.5px;
+    .landing-logo-wordmark {
+      display: inline-flex;
+      flex-direction: row;
+      align-items: baseline;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: clamp(1rem, 2.8vw, 1.2rem);
+      font-weight: 600;
+      letter-spacing: -.04em;
+      white-space: nowrap;
+      color: #1b1f24;
     }
-    .logo span.red { color: var(--joblet-red); }
+    .landing-logo-wordmark .highlight { color: var(--joblet-red); }
     .result-count {
       font-size: 13px;
       color: var(--text-secondary);
@@ -191,7 +197,7 @@
 
       root.innerHTML = `
         <div class="header">
-          <div class="logo">job<span class="red">let</span>.ai</div>
+          <div class="landing-logo-wordmark">job<span class="highlight">let</span>.ai</div>
           <div class="result-count">${data.total || data.jobs.length} results</div>
         </div>
         <div class="carousel">${cards}</div>

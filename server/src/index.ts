@@ -38,9 +38,7 @@ app.get("/.well-known/openai-apps-challenge", (req, res) => {
   if (!token) return res.status(404).send("Not configured");
   res.type("text/plain").send(token);
 });
-
-const WIDGET_URI = "ui://joblet/job-cards-v4";
-
+const WIDGET_URI = "ui://joblet/job-cards-v5";
 // Create a fresh McpServer per connection (stateless)
 function buildMcpServer() {
   const server = new Server(
