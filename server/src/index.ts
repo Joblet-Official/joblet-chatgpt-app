@@ -1,4 +1,10 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import express from "express";
@@ -37,80 +43,84 @@ const WIDGET_URI = "ui://joblet/job-cards";
 
 // Create a fresh McpServer per connection (stateless)
 function buildMcpServer() {
-  const server = new McpServer(
+  const server = new Server(
     { name: "Joblet - AI Job Search", version: "2.0.0" },
     { capabilities: { tools: {}, resources: {} } }
   );
 
   // Register the UI widget as a resource
-  server.resource(
-    "joblet-job-cards",
-    WIDGET_URI,
-    { name: "Joblet Job Cards", mimeType: "text/html" },
-    async (uri) => {
-      const widgetPath = path.join(__dirname, '..', 'public', 'widget', 'job-cards.html');
-      let html: string;
-      try { html = fs.readFileSync(widgetPath, 'utf-8'); }
-      catch { html = "<html><body><p>Widget not found</p></body></html>"; }
-      return { contents: [{ uri: uri.href, mimeType: "text/html", text: html }] };
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+    resources: [{ uri: WIDGET_URI, name: "Joblet Job Cards", mimeType: "text/html" }]
+  }));
+
+  server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
+    const widgetPath = path.join(__dirname, '..', 'public', 'widget', 'job-cards.html');
+    let html: string;
+    try { html = fs.readFileSync(widgetPath, 'utf-8'); }
+    catch { html = "<html><body><p>Widget not found</p></body></html>"; }
+    return { contents: [{ uri: req.params.uri, mimeType: "text/html", text: html }] };
+  });
+
+  // Instead of using server.tool() which strips _meta in the SDK, we manually handle it
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [{
+      name: "search_jobs",
+      description: "Search current Joblet jobs and side gigs by title, location, remote preference, employment type, salary, and schedule.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Job title, skill, or keyword" },
+          location: { type: "string", description: "City, state or 'remote'" },
+          limit: { type: "number", default: 12 },
+          remote: { type: "boolean" }
+        },
+        required: ["query"]
+      },
+      _meta: { ui: { resourceUri: WIDGET_URI } }
+    }]
+  }));
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    if (request.params.name !== "search_jobs") throw new Error("Tool not found");
+    const args = request.params.arguments as any;
+    
+    try {
+      const params = new URLSearchParams();
+      params.set("q", args.query);
+      if (args.location) params.set("location", args.location);
+      if (args.limit) params.set("limit", String(args.limit));
+      if (args.remote) params.set("remote", "true");
+
+      const response = await fetch(`https://joblet.ai/api/jobs?${params.toString()}`, {
+        headers: { "Accept": "application/json" }
+      });
+
+      if (!response.ok) throw new Error(`Joblet API error: ${response.status}`);
+      const raw = await response.json();
+
+      const jobs = (raw.jobs || []).map((j: any) => ({
+        title: j.title,
+        company: j.company?.name || "",
+        location: j.location || "Remote",
+        salary: j.salary || null,
+        type: (j.workSchedule?.[0] || j.employmentType?.[0] || "Full-time"),
+        url: j.applyUrl || `https://joblet.ai`
+      }));
+
+      const data = { jobs, total: raw.pagination?.total || jobs.length };
+
+      return {
+        content: [{ type: "text", text: `Found ${data.total} Joblet opportunities.` }],
+        structuredContent: data,
+        _meta: { ui: { resourceUri: WIDGET_URI } }
+      } as any;
+    } catch (error) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }]
+      };
     }
-  );
-
-  // Register the search_jobs tool
-  server.tool(
-    "search_jobs",
-    "Search current Joblet jobs and side gigs by title, location, remote preference, employment type, salary, and schedule.",
-    {
-      query: z.string().describe("Job title, skill, or keyword"),
-      location: z.string().optional().describe("City, state or 'remote'"),
-      radius_miles: z.number().min(1).max(100).optional(),
-      remote: z.boolean().optional(),
-      employment_types: z.array(z.string()).optional(),
-      salary_min: z.number().optional(),
-      limit: z.number().min(1).max(20).optional().default(12)
-    },
-    async (args) => {
-      try {
-        // Build query params for the working Joblet API
-        const params = new URLSearchParams();
-        params.set("q", args.query);
-        if (args.location) params.set("location", args.location);
-        if (args.limit) params.set("limit", String(args.limit));
-        if (args.remote) params.set("remote", "true");
-
-        const response = await fetch(`https://joblet.ai/api/jobs?${params.toString()}`, {
-          headers: { "Accept": "application/json" }
-        });
-
-        if (!response.ok) throw new Error(`Joblet API error: ${response.status}`);
-        const raw = await response.json();
-
-        // Normalize to a clean format our widget understands
-        const jobs = (raw.jobs || []).map((j: any) => ({
-          title: j.title,
-          company: j.company?.name || "",
-          location: j.location || "Remote",
-          salary: j.salary || null,
-          type: (j.workSchedule?.[0] || j.employmentType?.[0] || "Full-time"),
-          url: j.applyUrl || `https://joblet.ai`
-        }));
-
-        const data = { jobs, total: raw.pagination?.total || jobs.length };
-
-        return {
-          content: [{ type: "text" as const, text: `Found ${data.total} Joblet opportunities.` }],
-          structuredContent: data,
-          _meta: { ui: { resourceUri: WIDGET_URI } }
-        } as any;
-
-      } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }]
-        };
-      }
-    }
-  );
+  });
 
   return server;
 }
