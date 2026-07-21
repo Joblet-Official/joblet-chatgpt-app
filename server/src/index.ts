@@ -19,7 +19,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 // Restore express.json() because StreamableHTTPServerTransport NEEDS req.body to be parsed.
 // The previous "Parse error" was a false positive from Windows PowerShell mangling curl quotes.
-app.use(express.json());
+app.use("/mcp", express.json());
 app.use(cors({
   origin: '*',
   exposedHeaders: ['mcp-session-id'],
