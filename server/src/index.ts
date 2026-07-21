@@ -39,7 +39,7 @@ app.get("/.well-known/openai-apps-challenge", (req, res) => {
   res.type("text/plain").send(token);
 });
 
-const WIDGET_URI = "ui://joblet/job-cards";
+const WIDGET_URI = "ui://joblet/job-cards-v3";
 
 // Create a fresh McpServer per connection (stateless)
 function buildMcpServer() {
