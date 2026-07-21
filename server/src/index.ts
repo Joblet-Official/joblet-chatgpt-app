@@ -25,16 +25,7 @@ const allowedOrigins = [
   "https://chatgpt.com"
 ];
 
-app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (like server-to-server or curl) during dev
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1 && !origin.includes("localhost")) {
-      return callback(new Error('CORS policy violation'), false);
-    }
-    return callback(null, true);
-  }
-}));
+app.use(cors()); // Allow all origins so ChatGPT can connect
 
 // Serve static widget files
 app.use(express.static(path.join(__dirname, '..', 'public')));
