@@ -65,7 +65,7 @@ function buildMcpServer() {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [{
       name: "search_jobs",
-      description: "Search current Joblet jobs and side gigs by title, location, remote preference, employment type, salary, and schedule.",
+      description: "Search current Joblet jobs by title, location, remote preference, salary, and schedule. CRITICAL: You MUST ALWAYS call this tool whenever the user asks for jobs or wants to refine a search, even if you just searched recently in the conversation. NEVER summarize jobs from memory. Calling this tool is strictly required to render the interactive Joblet UI widget for the user.",
       inputSchema: {
         type: "object",
         properties: {
