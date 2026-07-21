@@ -165,7 +165,13 @@
       const data = payload && payload.type && payload.data ? payload.data : payload;
 
       if (!data || !data.jobs || data.jobs.length === 0) {
-        root.innerHTML = '<div class="empty-state">No jobs found. Try a different search!</div>';
+        root.innerHTML = `<div class="empty-state">
+          No jobs found. Try a different search!<br><br>
+          <div style="font-size:10px;text-align:left;background:#eee;padding:8px;border-radius:4px;word-break:break-all;">
+            <b>DEBUG PAYLOAD:</b><br>
+            ${escapeHtml(JSON.stringify(payload))}
+          </div>
+        </div>`;
         return;
       }
 
