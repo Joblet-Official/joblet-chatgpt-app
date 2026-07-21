@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Joblet Job Cards</title>
+  <style>
+    :root {
+      --joblet-red: #962727;
+      --joblet-red-hover: #7a1f1f;
+      --text-main: #1A1A1A;
+      --text-secondary: #666666;
+      --card-bg: #ffffff;
+      --border: #eaeaea;
+      --bg: #F8F5F1;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: transparent;
+      color: var(--text-main);
+      padding: 8px;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .logo {
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: -0.5px;
+    }
+    .logo span.red { color: var(--joblet-red); }
+    .result-count {
+      font-size: 13px;
+      color: var(--text-secondary);
+      background: var(--bg);
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+
+    /* Carousel */
+    .carousel {
+      display: flex;
+      overflow-x: auto;
+      gap: 14px;
+      padding: 4px 0 16px 0;
+      scroll-snap-type: x mandatory;
+      scrollbar-width: thin;
+      scrollbar-color: #ddd transparent;
+    }
+    .carousel::-webkit-scrollbar { height: 5px; }
+    .carousel::-webkit-scrollbar-thumb { background: #ddd; border-radius: 10px; }
+
+    /* Job Card */
+    .job-card {
+      min-width: 260px;
+      max-width: 260px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      scroll-snap-align: start;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .job-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+    }
+    .job-card::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 3px;
+      background: var(--joblet-red);
+    }
+
+    .job-tag {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--joblet-red);
+      background: #F3E5E5;
+      padding: 3px 8px;
+      border-radius: 20px;
+      width: fit-content;
+    }
+    .job-title {
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.3;
+      color: var(--text-main);
+    }
+    .job-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .meta-row {
+      font-size: 13px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .apply-btn {
+      display: block;
+      text-align: center;
+      background: var(--joblet-red);
+      color: white;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 10px 16px;
+      border-radius: 8px;
+      transition: background 0.2s;
+      margin-top: auto;
+    }
+    .apply-btn:hover { background: var(--joblet-red-hover); }
+
+    /* States */
+    .loading-state, .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-secondary);
+      font-size: 15px;
+    }
+    .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid #eee;
+      border-top-color: var(--joblet-red);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 16px auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div class="loading-state">
+      <div class="spinner"></div>
+      Loading Joblet opportunities...
+    </div>
+  </div>
+
+  <script type="module">
+    const root = document.getElementById('root');
+
+    function renderJobs(data) {
+      if (!data || !data.jobs || data.jobs.length === 0) {
+        root.innerHTML = '<div class="empty-state">No jobs found. Try a different search!</div>';
+        return;
+      }
+
+      const cards = data.jobs.map(job => `
+        <div class="job-card">
+          <div class="job-tag">Joblet Match</div>
+          <div class="job-title">${escapeHtml(job.title || 'Open Position')}</div>
+          <div class="job-meta">
+            <div class="meta-row"><span>📍</span><span>${escapeHtml(job.location || 'Remote')}</span></div>
+            ${job.salary ? `<div class="meta-row"><span>💰</span><span>${escapeHtml(job.salary)}</span></div>` : ''}
+            <div class="meta-row"><span>💼</span><span>${escapeHtml(job.type || 'Full-time')}</span></div>
+            ${job.company ? `<div class="meta-row"><span>🏢</span><span>${escapeHtml(job.company)}</span></div>` : ''}
+          </div>
+          <a href="${escapeHtml(job.url || 'https://joblet.ai')}" target="_blank" class="apply-btn">View &amp; Apply →</a>
+        </div>
+      `).join('');
+
+      root.innerHTML = `
+        <div class="header">
+          <div class="logo">job<span class="red">let</span>.ai</div>
+          <div class="result-count">${data.total || data.jobs.length} results</div>
+        </div>
+        <div class="carousel">${cards}</div>
+      `;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // Method 1: Official MCP Apps event (new spec)
+    window.addEventListener('openai:set_globals', (event) => {
+      const globals = event.detail?.globals;
+      if (globals?.toolOutput) {
+        renderJobs(globals.toolOutput);
+      }
+    });
+
+    // Method 2: Older window.openai.toolOutput pattern
+    if (window.openai?.toolOutput) {
+      renderJobs(window.openai.toolOutput);
+    }
+
+    // Method 3: Callback pattern
+    if (window.openai?.onToolOutput) {
+      window.openai.onToolOutput((data) => renderJobs(data));
+    }
+  </script>
+</body>
+</html>

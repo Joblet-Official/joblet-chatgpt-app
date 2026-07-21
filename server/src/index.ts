@@ -3,62 +3,41 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import express from "express";
 import cors from "cors";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 
-// Get current directory for static files (ES modules)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-
-// Security: Restrict CORS to Joblet domains and OpenAI for production
-const allowedOrigins = [
-  "https://joblet.ai",
-  "https://www.joblet.ai",
-  "https://api.joblet.ai",
-  "https://mcp.joblet.ai",
-  "https://chatgpt.com"
-];
-
-app.use(cors()); // Allow all origins so ChatGPT can connect
-
-// Serve static widget files
+app.use(cors());
+app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// Basic root health/status
 app.get("/", (req, res) => {
-  res.status(200).json({
-    name: "Joblet ChatGPT App",
-    status: "running",
-    mcp: "/mcp"
-  });
+  res.status(200).json({ name: "Joblet ChatGPT App", status: "running", mcp: "/mcp" });
 });
 
 app.get("/health", (req, res) => {
-  res.status(200).json({
-    status: "ok",
-    service: "joblet-chatgpt-app",
-    version: "1.1.0"
-  });
+  res.status(200).json({ status: "ok", service: "joblet-chatgpt-app", version: "1.2.0" });
 });
 
-// OpenAI Domain Verification Challenge
 app.get("/.well-known/openai-apps-challenge", (req, res) => {
   const token = process.env.OPENAI_APPS_CHALLENGE_TOKEN;
-  if (!token) {
-    return res.status(404).send("Not configured");
-  }
+  if (!token) return res.status(404).send("Not configured");
   res.type("text/plain").send(token);
 });
 
 const searchJobsSchema = z.object({
-  query: z.string().describe("Job title, skill, or keyword"),
-  location: z.string().optional().describe("Location to search in, e.g. 'Dallas, TX'"),
+  query: z.string(),
+  location: z.string().optional(),
   radius_miles: z.number().min(1).max(100).optional(),
   remote: z.boolean().optional(),
   employment_types: z.array(z.string()).optional(),
@@ -66,40 +45,78 @@ const searchJobsSchema = z.object({
   limit: z.number().min(1).max(20).default(12)
 });
 
-// Store active transports mapped by sessionId
 const transports = new Map<string, SSEServerTransport>();
 
-// Helper function to create an MCP Server instance per connection
+// The UI resource URI we advertise to ChatGPT
+const WIDGET_URI = "ui://joblet/job-cards";
+
 const createServerInstance = () => {
   const server = new Server(
-    { name: "Joblet - AI Job Search", version: "1.1.0" },
-    { capabilities: { tools: {} } }
+    { name: "Joblet - AI Job Search", version: "1.2.0" },
+    {
+      capabilities: {
+        tools: {},
+        resources: {}  // CRITICAL: tell ChatGPT we have UI resources
+      }
+    }
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return {
-      tools: [
-        {
-          name: "search_jobs",
-          description: "Search current Joblet jobs and side gigs by title, location, remote preference, employment type, salary, experience, and schedule.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              query: { type: "string", description: "Job title, skill, or keyword" },
-              location: { type: "string", description: "Location to search in" },
-              radius_miles: { type: "number", minimum: 1, maximum: 100 },
-              remote: { type: "boolean" },
-              employment_types: { type: "array", items: { type: "string" } },
-              salary_min: { type: "number" },
-              limit: { type: "number", minimum: 1, maximum: 20, default: 12 }
-            },
-            required: ["query"]
-          }
-        }
-      ]
-    };
+  // ChatGPT calls this to discover our UI widget
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+    resources: [
+      {
+        uri: WIDGET_URI,
+        name: "Joblet Job Cards",
+        description: "Renders a carousel of Joblet job listings as interactive cards",
+        mimeType: "text/html"
+      }
+    ]
+  }));
+
+  // ChatGPT calls this to fetch the actual HTML of the widget
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    if (request.params.uri === WIDGET_URI) {
+      const widgetPath = path.join(__dirname, '..', 'public', 'widget', 'job-cards.html');
+      let html: string;
+      try {
+        html = fs.readFileSync(widgetPath, 'utf-8');
+      } catch {
+        html = "<html><body><p>Widget not found</p></body></html>";
+      }
+      return {
+        contents: [{ uri: WIDGET_URI, mimeType: "text/html", text: html }]
+      };
+    }
+    throw new Error("Resource not found: " + request.params.uri);
   });
 
+  // Tool listing - includes _meta.ui.resourceUri to link to our widget
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [
+      {
+        name: "search_jobs",
+        description: "Search current Joblet jobs and side gigs by title, location, remote preference, employment type, salary, and schedule.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Job title, skill, or keyword" },
+            location: { type: "string", description: "Location to search in, e.g. 'Dallas, TX'" },
+            radius_miles: { type: "number", minimum: 1, maximum: 100 },
+            remote: { type: "boolean" },
+            employment_types: { type: "array", items: { type: "string" } },
+            salary_min: { type: "number" },
+            limit: { type: "number", minimum: 1, maximum: 20, default: 12 }
+          },
+          required: ["query"]
+        },
+        _meta: {
+          ui: { resourceUri: WIDGET_URI }
+        }
+      }
+    ]
+  }));
+
+  // Tool execution - returns structuredContent + _meta to trigger UI rendering
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (request.params.name === "search_jobs") {
       const args = searchJobsSchema.parse(request.params.arguments);
@@ -110,34 +127,29 @@ const createServerInstance = () => {
           body: JSON.stringify(args)
         });
 
-        if (!response.ok) {
-          throw new Error(`Joblet API returned status ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`Joblet API error: ${response.status}`);
 
         const data = await response.json();
-        
-        // Return both the markdown fallback and the structured UI data for the widget
+
         return {
           content: [
             {
               type: "text",
-              text: `Found ${data.total || 0} matching Joblet opportunities. The UI widget should render these.`
+              text: `Found ${data.total || 0} Joblet opportunities.`
             }
           ],
-          // This is injected directly into window.openai.toolOutput for our carousel.html
-          structuredContent: data 
-        } as any; // Cast as any because structuredContent / _meta might not be in official TS types yet
+          // Data payload sent to the iframe via openai:set_globals event
+          structuredContent: data,
+          // Tells ChatGPT to render our widget iframe
+          _meta: {
+            ui: { resourceUri: WIDGET_URI }
+          }
+        } as any;
 
       } catch (error) {
-        console.error(error);
         return {
           isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Error performing search: ${error instanceof Error ? error.message : String(error)}`
-            }
-          ]
+          content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }]
         };
       }
     }
@@ -147,7 +159,7 @@ const createServerInstance = () => {
   return server;
 };
 
-// --- MODERN /mcp ENDPOINT ---
+// /mcp endpoint
 app.get("/mcp", async (req, res) => {
   const server = createServerInstance();
   const transport = new SSEServerTransport("/mcp", res);
@@ -158,15 +170,11 @@ app.get("/mcp", async (req, res) => {
 app.post("/mcp", async (req, res) => {
   const sessionId = req.query.sessionId as string;
   const transport = transports.get(sessionId);
-  if (!transport) {
-    res.status(400).send("MCP connection not established for session: " + sessionId);
-    return;
-  }
+  if (!transport) { res.status(400).send("No session: " + sessionId); return; }
   await transport.handlePostMessage(req, res);
 });
 
-
-// --- LEGACY /sse ENDPOINT (For backwards compatibility) ---
+// Legacy /sse endpoint
 app.get("/sse", async (req, res) => {
   const server = createServerInstance();
   const transport = new SSEServerTransport("/messages", res);
@@ -177,15 +185,11 @@ app.get("/sse", async (req, res) => {
 app.post("/messages", async (req, res) => {
   const sessionId = req.query.sessionId as string;
   const transport = transports.get(sessionId);
-  if (!transport) {
-    res.status(400).send("SSE connection not established for session: " + sessionId);
-    return;
-  }
+  if (!transport) { res.status(400).send("No session: " + sessionId); return; }
   await transport.handlePostMessage(req, res);
 });
 
-
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`Joblet MCP Server running on http://localhost:${PORT}`);
+  console.log(`Joblet MCP Server v1.2.0 running on http://localhost:${PORT}`);
 });
