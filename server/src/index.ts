@@ -61,8 +61,24 @@ function buildMcpServer() {
     try { html = fs.readFileSync(widgetPath, 'utf-8'); }
     catch { html = "<html><body><p>Widget not found</p></body></html>"; }
     return {
-      contents: [{ uri: req.params.uri, mimeType: "text/html", text: html }]
-    };
+      contents: [{ uri: req.params.uri, mimeType: "text/html", text: html }],
+      _meta: {
+        ui: {
+          domain: "https://joblet.ai",
+          prefersBorder: true,
+          csp: {
+            connectDomains: [],
+            resourceDomains: [
+              "https://joblet.ai",
+              "https://mcp.joblet.ai",
+              "https://joblet-chatgpt-app.onrender.com"
+            ],
+            frameDomains: []
+          }
+        },
+        "openai/widgetDescription": "Displays matching Joblet jobs in an interactive job-card carousel."
+      }
+    } as any;
   });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -134,20 +150,8 @@ function buildMcpServer() {
         },
         _meta: {
           ui: {
-            resourceUri: WIDGET_URI,
-            domain: "https://joblet.ai",
-            prefersBorder: true,
-            csp: {
-              connectDomains: [],
-              resourceDomains: [
-                "https://joblet.ai",
-                "https://mcp.joblet.ai",
-                "https://joblet-chatgpt-app.onrender.com"
-              ],
-              frameDomains: []
-            }
-          },
-          "openai/widgetDescription": "Displays matching Joblet jobs in an interactive job-card carousel."
+            resourceUri: WIDGET_URI
+          }
         }
       } as any;
     } catch (error) {
