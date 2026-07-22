@@ -140,24 +140,21 @@ function buildMcpServer() {
       }));
 
       return {
-        content: [{ type: "text", text: `Found ${apiData.pagination?.total || jobs.length} Joblet opportunities.` }],
-        structuredContent: {
-          type: "application/json",
-          data: {
-            appliedFilters: args,
-            totalResults: apiData.pagination?.total || jobs.length,
-            nextCursor: null,
-            jobs: jobs
-          }
-        },
-        annotations: {
-          readOnlyHint: true,
-          openWorldHint: false,
-          destructiveHint: false
-        },
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            type: "application/json",
+            data: {
+              appliedFilters: { query: args.query, location: args.location, limit: args.limit },
+              totalResults: apiData.total || jobs.length,
+              nextCursor: apiData.nextPage || null,
+              jobs: jobs
+            }
+          })
+        }],
         _meta: {
           ui: {
-            resourceUri: WIDGET_URI
+            resourceUri: `${WIDGET_URI}?v=${Date.now()}`
           }
         }
       } as any;
