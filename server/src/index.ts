@@ -97,8 +97,13 @@ function buildMcpServer() {
           limit: { type: "number", default: 10 }
         },
         required: ["query"]
+      },
+      _meta: {
+        ui: {
+          resourceUri: WIDGET_URI
+        }
       }
-    }]
+    } as any]
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
