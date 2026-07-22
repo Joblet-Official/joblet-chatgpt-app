@@ -84,7 +84,7 @@ function buildMcpServer() {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [{
       name: "search_jobs",
-      description: "Search live Joblet listings and display interactive job cards. Use for initial job searches and follow-up refinements, including changes to title, location, salary, remote preference, employment type or pagination.",
+      description: "Search live Joblet listings and display interactive job cards. CRITICAL: DO NOT assume or infer a location based on the user's IP or profile. If the user does not explicitly type a city or country, you MUST leave the location parameter completely empty. Use for initial job searches and follow-up refinements, including changes to title, location, salary, remote preference, employment type or pagination.",
       inputSchema: {
         type: "object",
         properties: {
