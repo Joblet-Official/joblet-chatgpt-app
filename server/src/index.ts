@@ -84,11 +84,11 @@ function buildMcpServer() {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [{
       name: "search_jobs",
-      description: "Search live Joblet listings and display interactive job cards. Use for initial job searches and follow-up refinements, including changes to title, location, salary, remote preference, employment type or pagination. CRITICAL: If you infer the user's location automatically and the search returns 0 jobs, you MUST immediately perform a second follow-up search with the location parameter completely empty to find global matches. Explain to the user that there were no local jobs, but show the global jobs.",
+      description: "Search live Joblet listings and display interactive job cards. CRITICAL RULES: 1. Pass the EXACT phrase the user typed into the 'query' parameter. DO NOT add extra words like 'developer' or 'engineer'. 2. DO NOT hallucinate or guess a location unless the user explicitly names a city or country. 3. If a search with a location returns 0 jobs, immediately do a follow-up search globally without the location.",
       inputSchema: {
         type: "object",
         properties: {
-          query: { type: "string", description: "The job title, keyword, and location (e.g. 'backend developer in India')" },
+          query: { type: "string", description: "The EXACT job title or keyword the user typed. Do not modify it or add a location unless explicitly specified by the user." },
           remote: { type: "boolean" },
           minimumSalary: { type: "number" },
           employmentType: { type: "string" },
