@@ -78,6 +78,7 @@
       overflow: hidden;
       box-shadow: 0 2px 8px rgba(0,0,0,0.05);
       transition: transform 0.15s ease, box-shadow 0.15s ease;
+      cursor: pointer;
     }
     .job-card:hover {
       transform: translateY(-2px);
@@ -182,7 +183,7 @@
       }
 
       const cards = data.jobs.map(job => `
-        <div class="job-card">
+        <div class="job-card" onclick="window.open('${escapeHtml(job.url || 'https://joblet.ai')}', '_blank')">
           <div class="job-tag">Joblet Match</div>
           <div class="job-title">${escapeHtml(job.title || 'Open Position')}</div>
           <div class="job-meta">
