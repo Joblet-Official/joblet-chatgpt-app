@@ -6,6 +6,7 @@ import {
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
 import express from "express";
 import cors from "cors";
@@ -17,9 +18,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-// Restore express.json() because StreamableHTTPServerTransport NEEDS req.body to be parsed.
-// The previous "Parse error" was a false positive from Windows PowerShell mangling curl quotes.
-app.use("/mcp", express.json());
+
 app.use(cors({
   origin: '*',
   exposedHeaders: ['mcp-session-id'],
@@ -27,28 +26,33 @@ app.use(cors({
 }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-
-// Health endpoint
+// Phase 4: Production Routes
 app.get("/", (req, res) => res.json({ name: "Joblet ChatGPT App", status: "running", mcp: "/mcp" }));
 app.get("/health", (req, res) => res.json({ status: "ok", service: "joblet-chatgpt-app", version: "2.0.0" }));
 
-// OpenAI domain verification
 app.get("/.well-known/openai-apps-challenge", (req, res) => {
   const token = process.env.OPENAI_APPS_CHALLENGE_TOKEN;
-  if (!token) return res.status(404).send("Not configured");
+  if (!token) {
+    return res.status(404).send("Not configured");
+  }
   res.type("text/plain").send(token);
 });
-const WIDGET_URI = "ui://joblet/job-cards-v5";
-// Create a fresh McpServer per connection (stateless)
+
+const WIDGET_URI = "ui://joblet/job-cards-v1.html";
+
+// Create a fresh McpServer per connection
 function buildMcpServer() {
   const server = new Server(
     { name: "Joblet - AI Job Search", version: "2.0.0" },
     { capabilities: { tools: {}, resources: {} } }
   );
 
-  // Register the UI widget as a resource
   server.setRequestHandler(ListResourcesRequestSchema, async () => ({
-    resources: [{ uri: WIDGET_URI, name: "Joblet Job Cards", mimeType: "text/html" }]
+    resources: [{
+      uri: WIDGET_URI,
+      name: "Joblet Job Cards",
+      mimeType: "text/html"
+    }]
   }));
 
   server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
@@ -56,25 +60,28 @@ function buildMcpServer() {
     let html: string;
     try { html = fs.readFileSync(widgetPath, 'utf-8'); }
     catch { html = "<html><body><p>Widget not found</p></body></html>"; }
-    return { contents: [{ uri: req.params.uri, mimeType: "text/html", text: html }] };
+    return {
+      contents: [{ uri: req.params.uri, mimeType: "text/html", text: html }]
+    };
   });
 
-  // Instead of using server.tool() which strips _meta in the SDK, we manually handle it
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [{
       name: "search_jobs",
-      description: "Search current Joblet jobs by title, location, remote preference, salary, and schedule. CRITICAL: You MUST ALWAYS call this tool whenever the user asks for jobs or wants to refine a search, even if you just searched recently in the conversation. NEVER summarize jobs from memory. Calling this tool is strictly required to render the interactive Joblet UI widget for the user.",
+      description: "Search live Joblet listings and display interactive job cards. Use for initial job searches and follow-up refinements, including changes to title, location, salary, remote preference, employment type or pagination.",
       inputSchema: {
         type: "object",
         properties: {
-          query: { type: "string", description: "Job title, skill, or keyword" },
-          location: { type: "string", description: "City, state or 'remote'" },
-          limit: { type: "number", default: 12 },
-          remote: { type: "boolean" }
+          query: { type: "string" },
+          location: { type: "string" },
+          remote: { type: "boolean" },
+          minimumSalary: { type: "number" },
+          employmentType: { type: "string" },
+          cursor: { type: "string" },
+          limit: { type: "number", default: 10 }
         },
         required: ["query"]
-      },
-      _meta: { ui: { resourceUri: WIDGET_URI } }
+      }
     }]
   }));
 
@@ -86,8 +93,8 @@ function buildMcpServer() {
       const params = new URLSearchParams();
       params.set("q", args.query);
       if (args.location) params.set("location", args.location);
-      if (args.limit) params.set("limit", String(args.limit));
-      else params.set("limit", "3");
+      if (args.limit) params.set("limit", String(Math.min(Number(args.limit), 12)));
+      else params.set("limit", "10");
       if (args.remote) params.set("remote", "true");
 
       const response = await fetch(`https://joblet.ai/api/search?${params.toString()}`, {
@@ -96,17 +103,17 @@ function buildMcpServer() {
 
       if (!response.ok) throw new Error(`Joblet API error: ${response.status}`);
       const raw = await response.json();
-      
-      // The main API wraps the response in a 'data' object
       const apiData = raw.data || raw;
 
       const jobs = (apiData.jobs || []).map((j: any) => ({
+        id: j.id || Math.random().toString(),
         title: j.title,
         company: j.company?.name || "",
         location: j.location || "Remote",
         salary: j.salary || null,
-        type: (j.workSchedule?.[0] || j.employmentType?.[0] || "Full-time"),
-        url: j.applyUrl || `https://joblet.ai`
+        employmentType: (j.workSchedule?.[0] || j.employmentType?.[0] || "Full-time"),
+        summary: j.summary || "",
+        applyUrl: j.applyUrl || `https://joblet.ai`
       }));
 
       return {
@@ -114,11 +121,34 @@ function buildMcpServer() {
         structuredContent: {
           type: "application/json",
           data: {
-            jobs: jobs,
-            total: apiData.pagination?.total || jobs.length
+            appliedFilters: args,
+            totalResults: apiData.pagination?.total || jobs.length,
+            nextCursor: null,
+            jobs: jobs
           }
         },
-        _meta: { ui: { resourceUri: WIDGET_URI } }
+        annotations: {
+          readOnlyHint: true,
+          openWorldHint: false,
+          destructiveHint: false
+        },
+        _meta: {
+          ui: {
+            resourceUri: WIDGET_URI,
+            domain: "https://joblet.ai",
+            prefersBorder: true,
+            csp: {
+              connectDomains: [],
+              resourceDomains: [
+                "https://joblet.ai",
+                "https://mcp.joblet.ai",
+                "https://joblet-chatgpt-app.onrender.com"
+              ],
+              frameDomains: []
+            }
+          },
+          "openai/widgetDescription": "Displays matching Joblet jobs in an interactive job-card carousel."
+        }
       } as any;
     } catch (error) {
       return {
@@ -131,15 +161,20 @@ function buildMcpServer() {
   return server;
 }
 
-// Main /mcp endpoint using StreamableHTTP (what ChatGPT's validator expects)
+// ----------------------------------------------------
+// Streamable HTTP /mcp Transport (No express.json!)
+// ----------------------------------------------------
 app.all("/mcp", async (req, res) => {
   try {
     const server = buildMcpServer();
     const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined // stateless mode
+      sessionIdGenerator: undefined
     });
     await server.connect(transport);
-    await transport.handleRequest(req, res, req.body);
+    
+    // Pass raw req instead of req.body so transport can consume the stream natively
+    await transport.handleRequest(req, res);
+    
     res.on('close', () => server.close().catch(console.error));
   } catch (err) {
     console.error("MCP error:", err);
@@ -149,16 +184,9 @@ app.all("/mcp", async (req, res) => {
   }
 });
 
-// Legacy /sse endpoint kept for backwards compatibility
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  ListResourcesRequestSchema,
-  ReadResourceRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
-
+// ----------------------------------------------------
+// Legacy SSE Transport Fallback
+// ----------------------------------------------------
 const sseTransports = new Map<string, SSEServerTransport>();
 
 app.get("/sse", async (req, res) => {
@@ -168,7 +196,8 @@ app.get("/sse", async (req, res) => {
   sseTransports.set(transport.sessionId, transport);
 });
 
-app.post("/messages", async (req, res) => {
+// For /messages, we DO need express.json() if the SDK's handlePostMessage expects parsed body
+app.post("/messages", express.json(), async (req, res) => {
   const sessionId = req.query.sessionId as string;
   const transport = sseTransports.get(sessionId);
   if (!transport) { res.status(400).send("No session: " + sessionId); return; }
