@@ -135,7 +135,8 @@ function buildMcpServer() {
         salary: j.salary || null,
         type: (j.workSchedule?.[0] || j.employmentType?.[0] || "Full-time"),
         summary: j.summary || "",
-        url: j.applyUrl || `https://joblet.ai`
+        url: j.applyUrl || `https://joblet.ai`,
+        jobletUrl: j.slug ? `https://joblet.ai/jobs/${j.slug}` : (j.applyUrl || `https://joblet.ai`)
       }));
 
       return {

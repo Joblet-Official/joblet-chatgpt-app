@@ -183,7 +183,7 @@
       }
 
       const cards = data.jobs.map(job => `
-        <div class="job-card" onclick="window.open('${escapeHtml(job.url || 'https://joblet.ai')}', '_blank')">
+        <div class="job-card" onclick="if(!event.target.closest('.apply-btn')) window.open('${escapeHtml(job.jobletUrl || job.url || 'https://joblet.ai')}', '_blank')">
           <div class="job-tag">Joblet Match</div>
           <div class="job-title">${escapeHtml(job.title || 'Open Position')}</div>
           <div class="job-meta">
