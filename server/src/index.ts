@@ -133,9 +133,9 @@ function buildMcpServer() {
         company: j.company?.name || "",
         location: j.location || "Remote",
         salary: j.salary || null,
-        employmentType: (j.workSchedule?.[0] || j.employmentType?.[0] || "Full-time"),
+        type: (j.workSchedule?.[0] || j.employmentType?.[0] || "Full-time"),
         summary: j.summary || "",
-        applyUrl: j.applyUrl || `https://joblet.ai`
+        url: j.applyUrl || `https://joblet.ai`
       }));
 
       return {
