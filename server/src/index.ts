@@ -154,7 +154,7 @@ function buildMcpServer() {
         }],
         _meta: {
           ui: {
-            resourceUri: `${WIDGET_URI}?v=${Date.now()}`
+            resourceUri: WIDGET_URI
           }
         }
       } as any;
