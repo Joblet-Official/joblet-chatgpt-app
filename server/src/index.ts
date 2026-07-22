@@ -88,8 +88,7 @@ function buildMcpServer() {
       inputSchema: {
         type: "object",
         properties: {
-          query: { type: "string" },
-          location: { type: "string" },
+          query: { type: "string", description: "The job title, keyword, and location (e.g. 'backend developer in India')" },
           remote: { type: "boolean" },
           minimumSalary: { type: "number" },
           employmentType: { type: "string" },
@@ -112,8 +111,10 @@ function buildMcpServer() {
     
     try {
       const params = new URLSearchParams();
-      params.set("q", args.query);
-      if (args.location) params.set("location", args.location);
+      // If ChatGPT hallucinates the old location param, append it to the query naturally
+      const finalQuery = args.location ? `${args.query} in ${args.location}` : args.query;
+      params.set("q", finalQuery);
+      
       if (args.limit) params.set("limit", String(Math.min(Number(args.limit), 12)));
       else params.set("limit", "10");
       if (args.remote) params.set("remote", "true");
