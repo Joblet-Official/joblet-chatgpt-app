@@ -51,7 +51,7 @@ function buildMcpServer() {
     resources: [{
       uri: WIDGET_URI,
       name: "Joblet Job Cards",
-      mimeType: "text/html"
+      mimeType: "text/html;profile=mcp-app"
     }]
   }));
 
@@ -61,7 +61,7 @@ function buildMcpServer() {
     try { html = fs.readFileSync(widgetPath, 'utf-8'); }
     catch { html = "<html><body><p>Widget not found</p></body></html>"; }
     return {
-      contents: [{ uri: req.params.uri, mimeType: "text/html", text: html }],
+      contents: [{ uri: req.params.uri, mimeType: "text/html;profile=mcp-app", text: html }],
       _meta: {
         ui: {
           domain: "https://joblet.ai",
