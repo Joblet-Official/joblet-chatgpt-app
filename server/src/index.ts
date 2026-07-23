@@ -71,7 +71,8 @@ function buildMcpServer() {
             resourceDomains: [
               "https://joblet.ai",
               "https://mcp.joblet.ai",
-              "https://joblet-chatgpt-app.onrender.com"
+              "https://joblet-chatgpt-app.onrender.com",
+              "https://joblet-chatgpt-app-n8yw.onrender.com"
             ],
             frameDomains: []
           }
