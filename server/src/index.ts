@@ -84,18 +84,54 @@ function buildMcpServer() {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [{
       name: "search_jobs",
-      description: "Search live Joblet listings. CRITICAL RULES: 1. Pass the EXACT phrase the user typed into 'query' (do not add words like 'developer'). 2. If the user explicitly names a location, use it. 3. If the user does NOT name a location, you MUST infer their location from their profile/IP and append it to the query (e.g. 'manager in India'). 4. If any location search returns 0 jobs, you MUST immediately do a follow-up search completely empty of location to find global matches.",
+      title: "Search Jobs",
+      description: "Search live Joblet listings. CRITICAL RULES: 1. Pass the EXACT phrase the user typed into 'query' (do not add words like 'developer'). 2. If the user explicitly names a location, use it. 3. If the user does NOT name a location, you MUST infer their location from their profile/IP and append it to the query (e.g. 'manager in India'). 4. If any location search returns 0 jobs, you MUST immediately do a follow-up search completely empty of location to find global matches. 5. LOCATION-MISMATCH NOTE: ALWAYS show the job cards first and never hide or change them. Then check how many of the returned jobs actually match the location the user asked for. If the user named a COUNTRY and at least 8 of 10 jobs (about 80%) are outside that country, OR the user named a CITY and more than 6 of 10 jobs (about 60%) are outside that city, add a SHORT text note AFTER the cards: \"I couldn't find many exact matches in {location}, but here are related {role} roles you may like.\" If only a few jobs are off-location, add no note. Never add this note when the user did not specify a location.",
       inputSchema: {
         type: "object",
         properties: {
           query: { type: "string", description: "The EXACT job title or keyword the user typed, plus the inferred or explicit location." },
-          remote: { type: "boolean" },
-          minimumSalary: { type: "number" },
-          employmentType: { type: "string" },
-          cursor: { type: "string" },
           limit: { type: "number", default: 10 }
         },
         required: ["query"]
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          type: { type: "string" },
+          data: {
+            type: "object",
+            properties: {
+              appliedFilters: { type: "object" },
+              totalResults: { type: "number" },
+              jobs: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string" },
+                    title: { type: "string" },
+                    company: { type: "string" },
+                    location: { type: "string" },
+                    salary: { type: ["string", "number", "null"] },
+                    type: { type: "string" },
+                    summary: { type: "string" },
+                    url: { type: "string" },
+                    jobletUrl: { type: "string" }
+                  },
+                  required: ["title", "url"]
+                }
+              }
+            },
+            required: ["jobs"]
+          }
+        },
+        required: ["type", "data"]
+      },
+      annotations: {
+        title: "Search Jobs",
+        readOnlyHint: true,
+        openWorldHint: false,
+        destructiveHint: false
       },
       _meta: {
         ui: {
@@ -117,11 +153,19 @@ function buildMcpServer() {
       
       if (args.limit) params.set("limit", String(Math.min(Number(args.limit), 12)));
       else params.set("limit", "10");
-      if (args.remote) params.set("remote", "true");
 
-      const response = await fetch(`https://joblet.ai/api/search?${params.toString()}`, {
-        headers: { "Accept": "application/json" }
-      });
+      // Timeout so a slow/hung Joblet API can't hang the ChatGPT tool call
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      let response: Response;
+      try {
+        response = await fetch(`https://joblet.ai/api/search?${params.toString()}`, {
+          headers: { "Accept": "application/json" },
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!response.ok) throw new Error(`Joblet API error: ${response.status}`);
       const raw = await response.json();
@@ -146,7 +190,6 @@ function buildMcpServer() {
           data: {
             appliedFilters: args,
             totalResults: apiData.total || jobs.length,
-            nextCursor: null,
             jobs: jobs
           }
         },
@@ -162,9 +205,11 @@ function buildMcpServer() {
         }
       } as any;
     } catch (error) {
+      // Log server-side, but never leak internal error details to the client
+      console.error("search_jobs error:", error);
       return {
         isError: true,
-        content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }]
+        content: [{ type: "text", text: "Sorry, Joblet job search is temporarily unavailable. Please try again in a moment." }]
       };
     }
   });
