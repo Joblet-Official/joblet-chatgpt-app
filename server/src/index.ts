@@ -51,6 +51,70 @@ function normalizeLocation(loc: string): string {
   return t;
 }
 
+// ChatGPT frequently bakes the location into `query` ("software jobs in usa") and
+// adds filler words. Pull a trailing US location into the structured filter and
+// strip filler so the full-text search ranks on the real role, regardless of how
+// the model happens to call the tool.
+function parseSearch(rawQuery: unknown, explicitLocation?: unknown): { q: string; location?: string } {
+  let q = String(rawQuery || "").trim();
+  let location = explicitLocation ? String(explicitLocation).trim() : "";
+
+  // If no explicit location and a US location is baked onto the end of the query,
+  // extract it (e.g. "software engineer in united states" -> role + United States).
+  if (!location) {
+    const m = q.match(/\s+in\s+(?:the\s+)?(u\.?\s?s\.?\s?a\.?|u\.?\s?s\.?|usa|america|united states of america|united states)\s*$/i);
+    if (m && m.index !== undefined) {
+      location = "United States";
+      q = q.slice(0, m.index).trim();
+    }
+  }
+
+  // Drop filler words that pollute full-text ranking ("software jobs" -> "software").
+  const cleaned = q.replace(/\b(jobs|openings|vacancies|opportunities|listings)\b/gi, " ").replace(/\s+/g, " ").trim();
+  if (cleaned) q = cleaned; // but never blank the query entirely
+
+  return { q, location: location ? normalizeLocation(location) : undefined };
+}
+
+// Single call to the Joblet search API. Maps to the exact shape the widget reads.
+async function fetchJoblet(q: string, location: string | undefined, limit: string): Promise<{ total: number; jobs: any[] }> {
+  const params = new URLSearchParams();
+  params.set("q", q);
+  if (location) params.set("location", location);
+  params.set("limit", limit);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  let response: Response;
+  try {
+    response = await fetch(`https://joblet.ai/api/search?${params.toString()}`, {
+      headers: { "Accept": "application/json" },
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  if (!response.ok) throw new Error(`Joblet API error: ${response.status}`);
+  const raw = await response.json();
+  const apiData = raw.data || raw;
+
+  const jobs = (apiData.jobs || []).map((j: any) => ({
+    id: j.id || Math.random().toString(),
+    title: j.title,
+    company: j.company?.name || "",
+    location: j.location || "Remote",
+    salary: j.salary || null,
+    type: (j.workSchedule?.[0] || j.employmentType?.[0] || "Full-time"),
+    summary: j.summary || "",
+    url: j.applyUrl || `https://joblet.ai`,
+    jobletUrl: j.slug ? `https://joblet.ai/jobs/${j.slug}` : (j.applyUrl || `https://joblet.ai`)
+  }));
+
+  const total = apiData.pagination?.total ?? apiData.total ?? jobs.length;
+  return { total, jobs };
+}
+
 // Create a fresh McpServer per connection
 function buildMcpServer() {
   const server = new Server(
@@ -159,51 +223,26 @@ function buildMcpServer() {
     const args = request.params.arguments as any;
     
     try {
-      const params = new URLSearchParams();
-      // Send a CLEAN query (job title/keyword only). Location goes in the API's
-      // structured `location` filter — baking it into `q` wrecks search relevance.
-      params.set("q", String(args.query || "").trim());
-      if (args.location) params.set("location", normalizeLocation(String(args.location)));
+      const { q, location } = parseSearch(args.query, args.location);
+      const limit = args.limit ? String(Math.min(Number(args.limit), 12)) : "10";
 
-      if (args.limit) params.set("limit", String(Math.min(Number(args.limit), 12)));
-      else params.set("limit", "10");
-
-      // Timeout so a slow/hung Joblet API can't hang the ChatGPT tool call
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-      let response: Response;
-      try {
-        response = await fetch(`https://joblet.ai/api/search?${params.toString()}`, {
-          headers: { "Accept": "application/json" },
-          signal: controller.signal
-        });
-      } finally {
-        clearTimeout(timeoutId);
+      // Try with the location filter first. Joblet's location field is
+      // inconsistently formatted ("United States" vs "USA"), so a format mismatch
+      // can wrongly return 0. If that happens, retry without the location filter
+      // so a valid role search is never zeroed out by location formatting.
+      let result = await fetchJoblet(q, location, limit);
+      if (result.jobs.length === 0 && location) {
+        result = await fetchJoblet(q, undefined, limit);
       }
-
-      if (!response.ok) throw new Error(`Joblet API error: ${response.status}`);
-      const raw = await response.json();
-      const apiData = raw.data || raw;
-
-      const jobs = (apiData.jobs || []).map((j: any) => ({
-        id: j.id || Math.random().toString(),
-        title: j.title,
-        company: j.company?.name || "",
-        location: j.location || "Remote",
-        salary: j.salary || null,
-        type: (j.workSchedule?.[0] || j.employmentType?.[0] || "Full-time"),
-        summary: j.summary || "",
-        url: j.applyUrl || `https://joblet.ai`,
-        jobletUrl: j.slug ? `https://joblet.ai/jobs/${j.slug}` : (j.applyUrl || `https://joblet.ai`)
-      }));
+      const { total, jobs } = result;
 
       return {
-        content: [{ type: "text", text: `Found ${apiData.total || jobs.length} Joblet opportunities.` }],
+        content: [{ type: "text", text: `Found ${total} Joblet opportunities.` }],
         structuredContent: {
           type: "application/json",
           data: {
             appliedFilters: args,
-            totalResults: apiData.total || jobs.length,
+            totalResults: total,
             jobs: jobs
           }
         },
