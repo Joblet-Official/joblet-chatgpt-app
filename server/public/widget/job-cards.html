@@ -165,13 +165,29 @@
 
   <script type="module">
     const root = document.getElementById('root');
+    let dataReceived = false;
+
+    // If no data arrives within 3 seconds, the MCP session is stale (old chat).
+    // Hide the loading spinner and show nothing — just like Raytheon does.
+    setTimeout(() => {
+      if (!dataReceived) root.innerHTML = '';
+    }, 3000);
 
     function renderJobs(payload) {
+      dataReceived = true;
+
       // OpenAI wraps structuredContent in { type: 'application/json', data: {...} }
       // We must unwrap it to access the actual jobs array
       const data = payload && payload.type && payload.data ? payload.data : payload;
 
-      if (!data || !data.jobs || data.jobs.length === 0) {
+      // Stale session / no data at all → show blank (like Raytheon Careers)
+      if (!data || !data.jobs) {
+        root.innerHTML = '';
+        return;
+      }
+
+      // Live session but API returned 0 results → show "No jobs found"
+      if (data.jobs.length === 0) {
         root.innerHTML = `<div class="empty-state">No jobs found. Try a different search!</div>`;
         return;
       }
